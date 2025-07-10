@@ -7,10 +7,11 @@ from aiogram.fsm.context import FSMContext
 import aiohttp
 import aiosqlite
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-
-
-TOKEN = "7954621147:AAGXHf_bsa2GmgoNbh7NGM8WofXf0daVWck"
-ADMIN_ID = 7839682983
+import os
+from dotenv import load_dotenv
+load_dotenv()
+TOKEN = os.getenv("TOKEN")
+ADMIN_ID = os.getenv("ADMIN_ID")
 
 async def setup_database():
     async with aiosqlite.connect('database.db') as db:
