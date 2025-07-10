@@ -11,7 +11,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
-ADMIN_ID = os.getenv("ADMIN_ID")
+ADMIN_ID = 5108832503
 
 async def setup_database():
     async with aiosqlite.connect('database.db') as db:
