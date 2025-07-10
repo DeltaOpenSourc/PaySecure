@@ -48,21 +48,25 @@ async def start(message: Message):
             kb_builder.button(text=service, callback_data=f"service_{service}")
         kb_builder.adjust(1)
         services_kb = kb_builder.as_markup()
-        # Отправляем приветствие и услуги
         await message.answer(
             "Приветствуем вас, мы работаем как платёжный посредник для клиентов, которым нужно оплачивать инвойсы за автомобили, оборудование и другие товары в разные страны.\n\n"
             "Выберите услугу из списка ниже:",
             reply_markup=services_kb
         )
-        # Кнопка связи с менеджером отдельным сообщением
+        # Кнопки "Анкета" и "Связь с менеджером" рядом в одном сообщении
         contact_kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="Связь с менеджером", url="https://t.me/Paysecure1")]
+            [
+                InlineKeyboardButton(text="Анкета", callback_data="deepSeek"),
+                InlineKeyboardButton(text="Связь с менеджером", url="https://t.me/Paysecure1")
+            ]
         ])
-        await message.answer("Или свяжитесь с менеджером:", reply_markup=contact_kb)
+        await message.answer("Вы можете заполнить анкету или связаться с менеджером:", reply_markup=contact_kb)
     else:
-        # Если услуг нет — только приветствие и кнопка связи
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="Связь с менеджером", url="https://t.me/Paysecure1")]
+            [
+                InlineKeyboardButton(text="Анкета", callback_data="deepSeek"),
+                InlineKeyboardButton(text="Связь с менеджером", url="https://t.me/Paysecure1")
+            ]
         ])
         await message.answer(
             "Приветствуем вас, мы работаем как платёжный посредник для клиентов, которым нужно оплачивать инвойсы за автомобили, оборудование и другие товары в разные страны.",
