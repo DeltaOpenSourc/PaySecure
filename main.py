@@ -9,6 +9,7 @@ import aiosqlite
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import os
 from dotenv import load_dotenv
+
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
 ADMIN_ID = 5108832503
@@ -32,36 +33,47 @@ class AdminForm(StatesGroup):
     waiting_for_new_service_name = State()
     waiting_for_service_to_delete = State()
 
-@dp.message(CommandStart())
-async def start(message: Message):
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Анкета", callback_data="deepSeek")],
-        [InlineKeyboardButton(text="Связь с менеджером", url="https://t.me/Paysecure1")]
-    ])
-    await message.answer(
-        "Приветствуем вас, мы работаем как платёжный посредник для клиентов, которым нужно оплачивать инвойсы за автомобили, оборудование и другие товары в разные страны.",
-        reply_markup=kb,
-    )
-
-@dp.callback_query(lambda c: c.data == "deepSeek")
-async def ask_fio(call: CallbackQuery, state: FSMContext):
-    await call.message.answer("Введите ФИО:")
-    await state.set_state(Form.waiting_for_fio)
-    await call.answer()
-
 async def TernerTerner():
     async with aiosqlite.connect('database.db') as db:
         cursor = await db.execute('SELECT name FROM derty')
         rows = await cursor.fetchall()
         return [row[0] for row in rows]
 
-async def services_keyboard():
+@dp.message(CommandStart())
+async def start(message: Message):
     services = await TernerTerner()
-    kb_builder = InlineKeyboardBuilder()
-    for service in services:
-        kb_builder.button(text=service, callback_data=f"service_{service}")
-    kb_builder.adjust(1)
-    return kb_builder.as_markup()
+    if services:
+        kb_builder = InlineKeyboardBuilder()
+        for service in services:
+            kb_builder.button(text=service, callback_data=f"service_{service}")
+        kb_builder.adjust(1)
+        services_kb = kb_builder.as_markup()
+        # Отправляем приветствие и услуги
+        await message.answer(
+            "Приветствуем вас, мы работаем как платёжный посредник для клиентов, которым нужно оплачивать инвойсы за автомобили, оборудование и другие товары в разные страны.\n\n"
+            "Выберите услугу из списка ниже:",
+            reply_markup=services_kb
+        )
+        # Кнопка связи с менеджером отдельным сообщением
+        contact_kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Связь с менеджером", url="https://t.me/Paysecure1")]
+        ])
+        await message.answer("Или свяжитесь с менеджером:", reply_markup=contact_kb)
+    else:
+        # Если услуг нет — только приветствие и кнопка связи
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Связь с менеджером", url="https://t.me/Paysecure1")]
+        ])
+        await message.answer(
+            "Приветствуем вас, мы работаем как платёжный посредник для клиентов, которым нужно оплачивать инвойсы за автомобили, оборудование и другие товары в разные страны.",
+            reply_markup=kb,
+        )
+
+@dp.callback_query(lambda c: c.data == "deepSeek")
+async def ask_fio(call: CallbackQuery, state: FSMContext):
+    await call.message.answer("Введите ФИО:")
+    await state.set_state(Form.waiting_for_fio)
+    await call.answer()
 
 @dp.message(Form.waiting_for_fio)
 async def process_fio(message: Message, state: FSMContext):
@@ -75,6 +87,14 @@ async def process_fio(message: Message, state: FSMContext):
         await state.clear()
         return
     await state.set_state(Form.waiting_for_service_choice)
+
+async def services_keyboard():
+    services = await TernerTerner()
+    kb_builder = InlineKeyboardBuilder()
+    for service in services:
+        kb_builder.button(text=service, callback_data=f"service_{service}")
+    kb_builder.adjust(1)
+    return kb_builder.as_markup()
 
 @dp.callback_query(lambda c: c.data and c.data.startswith("service_"), StateFilter(Form.waiting_for_service_choice))
 async def process_service_choice(call: CallbackQuery, state: FSMContext):
@@ -95,13 +115,10 @@ async def process_username(message: Message, state: FSMContext):
 async def process_phone(message: Message, state: FSMContext):
     await state.update_data(phone=message.text)
     data = await state.get_data()
-    await message.answer("Заявка успешно отправлена! Введите /start для начала заново.")
     fio = data.get("fio")
     username = data.get("username")
     phone = data.get("phone")
     service = data.get("service")
-
-    await state.clear()
 
     payload = {
         "fio": fio,
@@ -116,6 +133,8 @@ async def process_phone(message: Message, state: FSMContext):
                 await message.answer("Заявка успешно отправлена! Введите /start для начала заново.")
             else:
                 await message.answer("Ошибка при отправке заявки. Попробуйте позже.")
+
+    await state.clear()
 
 @dp.message(Command(commands=["admin"]))
 async def admin_panel(message: Message, state: FSMContext):
