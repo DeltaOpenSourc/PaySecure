@@ -1,4 +1,4 @@
-import asyncio
+imimport asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -9,10 +9,13 @@ import aiosqlite
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import os
 from dotenv import load_dotenv
+from aiogram.fsm.storage.memory import MemoryStorage
 
+storage = MemoryStorage()
 load_dotenv()
-TOKEN = os.getenv("TOKEN")
-ADMIN_ID = 7839682983
+
+TOKEN = "7969411886:AAFIxEzdCYe-ehyOdV1E3Hu0iBJ465iqN5s"
+ADMIN_ID = 5108832503
 
 async def setup_database():
     async with aiosqlite.connect('database.db') as db:
@@ -20,11 +23,11 @@ async def setup_database():
         await db.commit()
 
 bot = Bot(token=TOKEN)
-dp = Dispatcher()
+dp = Dispatcher(storage=storage)
 
 class Form(StatesGroup):
-    waiting_for_fio = State()
     waiting_for_service_choice = State()
+    waiting_for_fio = State()
     waiting_for_username = State()
     waiting_for_phone = State()
 
@@ -33,81 +36,54 @@ class AdminForm(StatesGroup):
     waiting_for_new_service_name = State()
     waiting_for_service_to_delete = State()
 
-async def TernerTerner():
+async def get_services():
     async with aiosqlite.connect('database.db') as db:
         cursor = await db.execute('SELECT name FROM derty')
         rows = await cursor.fetchall()
         return [row[0] for row in rows]
 
-@dp.message(CommandStart())
-async def start(message: Message):
-    services = await TernerTerner()
-    if services:
-        kb_builder = InlineKeyboardBuilder()
-        for service in services:
-            kb_builder.button(text=service, callback_data=f"service_{service}")
-        kb_builder.adjust(1)
-        services_kb = kb_builder.as_markup()
-        await message.answer(
-            "Приветствуем вас, мы работаем как платёжный посредник для клиентов, которым нужно оплачивать инвойсы за автомобили, оборудование и другие товары в разные страны.\n\n"
-            "Выберите услугу из списка ниже:",
-            reply_markup=services_kb
-        )
-        # Кнопки "Анкета" и "Связь с менеджером" рядом в одном сообщении
-        contact_kb = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="Анкета", callback_data="deepSeek"),
-                InlineKeyboardButton(text="Связь с менеджером", url="https://t.me/Paysecure1")
-            ]
-        ])
-        await message.answer("Вы можете заполнить анкету или связаться с менеджером:", reply_markup=contact_kb)
-    else:
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="Анкета", callback_data="deepSeek"),
-                InlineKeyboardButton(text="Связь с менеджером", url="https://t.me/Paysecure1")
-            ]
-        ])
-        await message.answer(
-            "Приветствуем вас, мы работаем как платёжный посредник для клиентов, которым нужно оплачивать инвойсы за автомобили, оборудование и другие товары в разные страны.",
-            reply_markup=kb,
-        )
-
-@dp.callback_query(lambda c: c.data == "deepSeek")
-async def ask_fio(call: CallbackQuery, state: FSMContext):
-    await call.message.answer("Введите ФИО:")
-    await state.set_state(Form.waiting_for_fio)
-    await call.answer()
-
-@dp.message(Form.waiting_for_fio)
-async def process_fio(message: Message, state: FSMContext):
-    await state.update_data(fio=message.text)
-    
-    kb = await services_keyboard()
-    if kb.inline_keyboard:
-        await message.answer("Выберите услугу:", reply_markup=kb)
-    else:
-        await message.answer("Пока нет доступных услуг. Обратитесь к администратору.")
-        await state.clear()
-        return
-    await state.set_state(Form.waiting_for_service_choice)
-
 async def services_keyboard():
-    services = await TernerTerner()
+    services = await get_services()
     kb_builder = InlineKeyboardBuilder()
     for service in services:
         kb_builder.button(text=service, callback_data=f"service_{service}")
     kb_builder.adjust(1)
     return kb_builder.as_markup()
 
+@dp.message(CommandStart())
+async def start(message: Message, state: FSMContext):
+    services = await get_services()
+    if services:
+        kb = await services_keyboard()
+        await message.answer(
+            "Приветствуем вас! Пожалуйста, выберите услугу из списка ниже:",
+            reply_markup=kb
+        )
+        # Кнопка для связи с менеджером
+        contact_kb = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="Связь с менеджером", url="https://t.me/Paysecure1")
+            ]
+        ])
+        await message.answer("Если хотите, можете связаться с менеджером:", reply_markup=contact_kb)
+        await state.set_state(Form.waiting_for_service_choice)
+    else:
+        await message.answer("Пока нет доступных услуг. Обратитесь к администратору.")
+        await state.clear()
+
 @dp.callback_query(lambda c: c.data and c.data.startswith("service_"), StateFilter(Form.waiting_for_service_choice))
 async def process_service_choice(call: CallbackQuery, state: FSMContext):
     service = call.data[len("service_"):]
     await state.update_data(service=service)
-    await call.message.answer(f"Ваша услуга: {service}")
-    await call.message.answer("Введите ваш юзернейм:")
-    await state.set_state(Form.waiting_for_username)
+    await call.message.answer(f"Вы выбрали услугу: {service}\nПожалуйста, введите ваше ФИО:")
+    await state.set_state(Form.waiting_for_fio)
     await call.answer()
+
+@dp.message(Form.waiting_for_fio)
+async def process_fio(message: Message, state: FSMContext):
+    await state.update_data(fio=message.text)
+    await message.answer("Введите ваш юзернейм:")
+    await state.set_state(Form.waiting_for_username)
 
 @dp.message(Form.waiting_for_username)
 async def process_username(message: Message, state: FSMContext):
@@ -123,6 +99,7 @@ async def process_phone(message: Message, state: FSMContext):
     username = data.get("username")
     phone = data.get("phone")
     service = data.get("service")
+    await message.answer("Заявка успешно отправлена! Введите /start для начала заново.")
 
     payload = {
         "fio": fio,
@@ -130,17 +107,15 @@ async def process_phone(message: Message, state: FSMContext):
         "phone": phone,
         "service": service,
     }
+    await message.answer("Заявка успешно отправлена! Введите /start для начала заново.")
+    await state.clear()
 
     async with aiohttp.ClientSession() as session:
         async with session.post("https://nexthe-beta.vercel.app/api/search", json=payload) as resp:
-            if resp.status == 200:
-                await message.answer("Заявка успешно отправлена! Введите /start для начала заново.")
-            else:
-                await message.answer("Ошибка при отправке заявки. Попробуйте позже.")
+              await message.answer("Заявка успешно отправлена! Введите /start для начала заново.")
 
-    await state.clear()
 
-@dp.message(Command(commands=["admin"]))
+@dp.message(Command("admin"), StateFilter("*"))
 async def admin_panel(message: Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         await message.answer("У вас нет доступа к этой команде.")
@@ -179,8 +154,8 @@ async def process_for_name(message: Message, state: FSMContext):
             await db.execute('INSERT INTO derty (name) VALUES (?)', (service_name,))
             await db.commit()
             await message.answer(f"Услуга '{service_name}' добавлена в базу данных.")
-            ferty = await TernerTerner()
-            await message.answer("\n".join(f"{i+1}. {service}" for i, service in enumerate(ferty)))
+            services = await get_services()
+            await message.answer("\n".join(f"{i+1}. {service}" for i, service in enumerate(services)))
         except aiosqlite.IntegrityError:
             await message.answer(f"Услуга '{service_name}' уже существует в базе.")
     await state.clear()
@@ -192,8 +167,8 @@ async def process_for_delete(message: Message, state: FSMContext):
         cursor = await db.execute('DELETE FROM derty WHERE name = ?', (service_name,))
         await db.commit()
         await message.answer(f"Услуга '{service_name}' удалена из базы данных.")
-        ferty = await TernerTerner()
-        await message.answer("\n".join(f"{i+1}. {service}" for i, service in enumerate(ferty)))
+        services = await get_services()
+        await message.answer("\n".join(f"{i+1}. {service}" for i, service in enumerate(services)))
     await state.clear()
 
 async def main():
