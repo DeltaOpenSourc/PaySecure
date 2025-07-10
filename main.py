@@ -56,7 +56,7 @@ async def start(message: Message, state: FSMContext):
     if services:
         kb = await services_keyboard()
         await message.answer(
-            "Приветствуем вас! Пожалуйста, выберите услугу из списка ниже:",
+            "Здравствуйте мы компания PaySecure - поможем вам с " + "\n"  + "• Оплачивать инвойсы за товары и услуги за границей" + "\n" + "• Оформлять банковские и финтех-карты для фрилансеров, компаний и переезжающих",
             reply_markup=kb
         )
         # Кнопка для связи с менеджером
@@ -107,7 +107,6 @@ async def process_phone(message: Message, state: FSMContext):
         "phone": phone,
         "service": service,
     }
-    await message.answer("Заявка успешно отправлена! Введите /start для начала заново.")
     await state.clear()
 
     async with aiohttp.ClientSession() as session:
