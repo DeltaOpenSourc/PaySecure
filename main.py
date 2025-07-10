@@ -15,7 +15,7 @@ storage = MemoryStorage()
 load_dotenv()
 
 TOKEN = "7969411886:AAFIxEzdCYe-ehyOdV1E3Hu0iBJ465iqN5s"
-ADMIN_ID = 5108832503
+ADMIN_ID = 7839682983
 
 async def setup_database():
     async with aiosqlite.connect('database.db') as db:
