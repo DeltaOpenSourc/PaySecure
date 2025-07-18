@@ -1,178 +1,418 @@
-imimport asyncio
-from aiogram import Bot, Dispatcher
-from aiogram.filters import CommandStart, Command, StateFilter
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from aiogram.fsm.state import State, StatesGroup
+from aiogram import Bot, Dispatcher, F
+from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
-import aiohttp
-import aiosqlite
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import Message, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-import os
-from dotenv import load_dotenv
-from aiogram.fsm.storage.memory import MemoryStorage
-
-storage = MemoryStorage()
-load_dotenv()
+import aiosqlite
+import aiohttp
+import logging
 
 TOKEN = "7969411886:AAFIxEzdCYe-ehyOdV1E3Hu0iBJ465iqN5s"
-ADMIN_ID = 7839682983
 
-async def setup_database():
-    async with aiosqlite.connect('database.db') as db:
-        await db.execute('''CREATE TABLE IF NOT EXISTS derty (id INTEGER PRIMARY KEY, name TEXT UNIQUE)''')
-        await db.commit()
+logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=TOKEN)
-dp = Dispatcher(storage=storage)
+dp = Dispatcher()
 
 class Form(StatesGroup):
     waiting_for_service_choice = State()
-    waiting_for_fio = State()
-    waiting_for_username = State()
+    waiting_for_name = State()
     waiting_for_phone = State()
+    waiting_for_email = State()
+    waiting_for_inn = State()
+    waiting_for_comment = State()
 
-class AdminForm(StatesGroup):
-    waiting_for_action = State()
-    waiting_for_new_service_name = State()
-    waiting_for_service_to_delete = State()
+    partner_name = State()
+    partner_city = State()
+    partner_experience = State()
+    partner_telegram = State()
+
+    invoice_valuta = State()
+    invoice_strana = State()
+    invoice_summa = State()
+    invoice_screen = State()
+    invoice_comm = State()
+
+    strana_other = State()
+    strana_name = State()
+    strana_telegram = State()
+    strana_comm = State()
+    strana_fer = State()
+    strana_sv = State()
+    strana_strana = State()
+
+    manager = State()
+
+
+MAIN_MENU_BUTTONS = [
+    ("Оформить карту", "menu_card"),
+    ("Оплатить инвойс", "menu_invoice"),
+    ("Задать вопрос", "menu_question"),
+    ("О нас", "menu_about"),
+    ("Стать партнёром", "menu_partner"),
+]
+
+MAIN_CARD_BUTTONS = [
+    ("🇹🇷 Турция", "strana_turcian"),
+    ("🇦🇪 ОАЭ", "strana_oae"),
+    ("🇹🇯 Таджикистан", "strana_tadzhikistan"),
+    ("Другая", "strana_other"),
+]
+
+MAIN_FEART_BUTTONS = [
+    ("Оставить заявку", "zayvka"),
+]
+
+def main_menu_keyboard():
+    kb_builder = InlineKeyboardBuilder()
+    for text, cb_data in MAIN_MENU_BUTTONS:
+        kb_builder.button(text=text, callback_data=cb_data)
+    kb_builder.adjust(1)
+    return kb_builder.as_markup()
+
+def main_feart_keyboard():
+    kb_builder = InlineKeyboardBuilder()
+    for text, cb_data in MAIN_FEART_BUTTONS:
+        kb_builder.button(text=text, callback_data=cb_data)
+    kb_builder.adjust(1)
+    return kb_builder.as_markup()
+
+def main_card_keyboard():
+    kb_builder = InlineKeyboardBuilder()
+    for text, cb_data in MAIN_CARD_BUTTONS:
+        kb_builder.button(text=text, callback_data=cb_data)
+    kb_builder.adjust(1)
+    return kb_builder.as_markup()
+
 
 async def get_services():
-    async with aiosqlite.connect('database.db') as db:
-        cursor = await db.execute('SELECT name FROM derty')
-        rows = await cursor.fetchall()
-        return [row[0] for row in rows]
+    async with aiosqlite.connect("services.db") as db:
+        cursor = await db.execute("SELECT id, name FROM services")
+        services = await cursor.fetchall()
+        await cursor.close()
+    return services
 
 async def services_keyboard():
     services = await get_services()
     kb_builder = InlineKeyboardBuilder()
-    for service in services:
-        kb_builder.button(text=service, callback_data=f"service_{service}")
+    for service_id, service_name in services:
+        kb_builder.button(text=service_name, callback_data=f"service_{service_id}")
     kb_builder.adjust(1)
     return kb_builder.as_markup()
 
+
+
 @dp.message(CommandStart())
 async def start(message: Message, state: FSMContext):
-    services = await get_services()
-    if services:
-        kb = await services_keyboard()
-        await message.answer(
-            "Здравствуйте мы компания PaySecure - поможем вам с " + "\n"  + "• Оплачивать инвойсы за товары и услуги за границей" + "\n" + "• Оформлять банковские и финтех-карты для фрилансеров, компаний и переезжающих" + "\n" + "Для выбора услуг используйте кнопки ниже",
-            reply_markup=kb
-        )
-        # Кнопка для связи с менеджером
-        contact_kb = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="Связь с менеджером", url="https://t.me/Paysecure1")
-            ]
-        ])
-        await message.answer("Если хотите, можете связаться с менеджером:", reply_markup=contact_kb)
-        await state.set_state(Form.waiting_for_service_choice)
-    else:
-        await message.answer("Пока нет доступных услуг. Обратитесь к администратору.")
-        await state.clear()
+    kb = main_menu_keyboard()
+    await message.answer(
+        "Добро пожаловать в PaySecure! Выберите нужный пункт меню:",
+        reply_markup=kb
+    )
+    await state.clear()
 
-@dp.callback_query(lambda c: c.data and c.data.startswith("service_"), StateFilter(Form.waiting_for_service_choice))
-async def process_service_choice(call: CallbackQuery, state: FSMContext):
-    service = call.data[len("service_"):]
-    await state.update_data(service=service)
-    await call.message.answer(f"Вы выбрали услугу: {service}\nПожалуйста, введите ваше ФИО:")
-    await state.set_state(Form.waiting_for_fio)
+@dp.callback_query(F.data.startswith("menu_"))
+async def process_menu_callback(call: CallbackQuery, state: FSMContext):
+    action = call.data[len("menu_"):]
+
+    if action == "card":
+        kb_strana = main_card_keyboard()
+        await call.message.answer("Выберите страну:", reply_markup=kb_strana)
+
+    elif action == "invoice":
+        await call.message.answer("Пожалуйста, введите данные для оплаты инвойсов.\n1. Валюта:")
+        await state.set_state(Form.invoice_valuta)
+
+    elif action == "question":
+        await call.message.answer("Задайте ваш вопрос:")
+        await state.set_state(Form.manager)
+
+    elif action == "about":
+        await call.message.answer(
+            "PaySecure — ваш надёжный партнёр в мире финтеха.\n\n"
+            "Оформляем карты, помогаем с оплатой международных инвойсов.\n\n"
+            "Контакт: @admin_telegram\n"
+            "Email: Paysecure2025@gmail.com"
+        )
+
+    elif action == "partner":
+        await call.message.answer("Пожалуйста, введите данные для регистрации партнёра.\n1. Имя:")
+        await state.set_state(Form.partner_name)
     await call.answer()
 
-@dp.message(Form.waiting_for_fio)
-async def process_fio(message: Message, state: FSMContext):
-    await state.update_data(fio=message.text)
-    await message.answer("Введите ваш юзернейм:")
-    await state.set_state(Form.waiting_for_username)
+@dp.callback_query(F.data.startswith("strana_"))
+async def process_strana_callback(call: CallbackQuery, state: FSMContext):
+    country = call.data[len("strana_"):]
+    heart = main_feart_keyboard()
+    if country != "other":
+        country_name_map = {
+            "turcian": "Турция",
+            "oae": "ОАЭ",
+            "tadzhikistan": "Таджикистан",
+        }
+        country_text = country_name_map.get(country, country)
+        await state.update_data(selected_country=country_text)
 
-@dp.message(Form.waiting_for_username)
-async def process_username(message: Message, state: FSMContext):
-    await state.update_data(username=message.text)
-    await message.answer("Введите ваш номер телефона:")
+        await call.message.answer(f"Вы выбрали карту {country_text}")
+        await call.message.answer("Условия карты:", reply_markup=heart)
+    else:
+        await call.message.answer("Пожалуйста, введите страну:")
+        await state.set_state(Form.strana_other)
+    await call.answer()
+
+
+
+@dp.callback_query(F.data.startswith("zayvka"))
+async def process_strana_callback(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    country = data.get("selected_country", "не выбрана")
+    await call.message.answer(f"Вы выбрали страну: {country}")
+    await call.message.answer(f"Введите имя:")
+    await state.set_state(Form.strana_name)
+    
+    await call.answer()
+
+@dp.message(Form.manager)
+async def manager_sv(message: Message, state: FSMContext):
+    await state.update_data(selected_manager=message.text)
+    dataManager = await state.get_data()
+    coun = dataManager.get("selected_manager", "не задан")
+    await message.answer(f"Ваш вопрос: {coun} передан менеджеру ожидайте ответа!")
+    await state.clear()
+
+    payload = {
+        "manager": dataManager["selected_manager"],
+        "username": "@" + message.from_user.username or "не указан"
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post("https://nexthe-beta.vercel.app/api/manager", json=payload) as resp:
+            if resp.status == 200:
+                await message.answer("Отправлено...")
+            else:
+                await message.answer("Ошибка при отправке заявки на партнерство.")
+    
+
+@dp.message(Form.strana_name)
+async def strana_telegram(message: Message, state: FSMContext):
+    await state.update_data(selected_name=message.text)
+    await message.answer(f"Введите telegram:")
+    await state.set_state(Form.strana_telegram)
+
+@dp.message(Form.strana_telegram)
+async def strana_fer(message: Message, state: FSMContext):
+    await state.update_data(selected_telegram=message.text)
+    await message.answer(f"Введите страну:")
+    await state.set_state(Form.strana_strana)
+
+@dp.message(Form.strana_strana)
+async def strana_fer(message: Message, state: FSMContext):
+    await state.update_data(selected_strana=message.text)
+    await message.answer(f"Введите способ связи:")
+    await state.set_state(Form.strana_sv)
+
+@dp.message(Form.strana_sv)
+async def strana_sv(message: Message, state: FSMContext):
+    await state.update_data(selected_sv=message.text)
+    await message.answer(f"Введите комментарий:")
+    await state.set_state(Form.strana_comm)
+
+@dp.message(Form.strana_comm)
+async def strana_comm(message: Message, state: FSMContext):
+    await state.update_data(selected_comm=message.text)
+    data = await state.get_data()
+    await message.answer(
+        "Ваша заявка отправлена!\n\n"
+        f"Страна карты: {data['selected_country']}\n"
+        f"Имя: {data['selected_name']}\n"
+        f"Телеграмм: {data['selected_telegram']}\n"
+        f"Страна: {data['selected_strana']}\n"
+        f"Способ связи: {data['selected_sv']}\n"
+        f"Комментарий: {data['selected_comm']}\n\n"
+        "Мы свяжемся с вами в ближайшее время."
+    )
+
+    payload = {
+        "strana_card": data["selected_country"],
+        "name": data["selected_name"],
+        "telegram": data["selected_telegram"],
+        "strana": data['selected_strana'],
+        "sv": data["selected_sv"],
+        "comm": data["selected_comm"],
+    }
+
+    await state.clear()
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post("https://nexthe-beta.vercel.app/api/karta", json=payload) as resp:
+              await message.answer("Заявка успешно отправлена!")
+
+@dp.message(Form.strana_other)
+async def strana_other(message: Message, state: FSMContext):
+    await state.update_data(selected_country=message.text)
+    data = await state.get_data()
+    country = data.get("selected_country", "не выбрана")
+    await message.answer(f"Вы выбрали страну: {country}")
+    heart = main_feart_keyboard()
+    await message.answer("Условия карты:", reply_markup=heart)
+
+@dp.callback_query(F.data.startswith("service_"))
+async def process_service_choice(call: CallbackQuery, state: FSMContext):
+    service_id = int(call.data[len("service_"):])
+    await state.update_data(service_id=service_id)
+
+    data = await state.get_data()
+    country = data.get("selected_country", "не выбрана")
+
+
+    await call.message.answer(f"Выбранная страна: {country}\nВведите ваше имя и фамилию:")
+    await state.set_state(Form.waiting_for_name)
+    await call.answer()
+
+@dp.message(Form.waiting_for_name)
+async def process_name(message: Message, state: FSMContext):
+    await state.update_data(name=message.text)
+    data = await state.get_data()
+    country = data.get("selected_country", "не выбрана")
+    await message.answer(f"Страна: {country}\nВведите ваш номер телефона:")
     await state.set_state(Form.waiting_for_phone)
 
 @dp.message(Form.waiting_for_phone)
 async def process_phone(message: Message, state: FSMContext):
     await state.update_data(phone=message.text)
     data = await state.get_data()
-    fio = data.get("fio")
-    username = data.get("username")
-    phone = data.get("phone")
-    service = data.get("service")
-    await message.answer("Заявка успешно отправлена! Введите /start для начала заново.")
+    country = data.get("selected_country", "не выбрана")
+    await message.answer(f"Страна: {country}\nВведите ваш email:")
+    await state.set_state(Form.waiting_for_email)
+
+@dp.message(Form.waiting_for_email)
+async def process_email(message: Message, state: FSMContext):
+    await state.update_data(email=message.text)
+    data = await state.get_data()
+    country = data.get("selected_country", "не выбрана")
+    await message.answer(f"Страна: {country}\nВведите ваш ИНН:")
+    await state.set_state(Form.waiting_for_inn)
+
+@dp.message(Form.waiting_for_inn)
+async def process_inn(message: Message, state: FSMContext):
+    await state.update_data(inn=message.text)
+    data = await state.get_data()
+    country = data.get("selected_country", "не выбрана")
+    await message.answer(f"Страна: {country}\nВведите комментарий (если есть), или напишите 'нет':")
+    await state.set_state(Form.waiting_for_comment)
+
+@dp.message(Form.waiting_for_comment)
+async def process_comment(message: Message, state: FSMContext):
+    comment = message.text if message.text.lower() != "нет" else ""
+    await state.update_data(comment=comment)
+    await message.answer("Спасибо! Ваша заявка принята. Мы свяжемся с вами в ближайшее время.")
+    await state.clear()
+
+@dp.message(Form.partner_name)
+async def partner_name_handler(message: Message, state: FSMContext):
+    await state.update_data(partner_name=message.text)
+    await message.answer("2. Город:")
+    await state.set_state(Form.partner_city)
+
+@dp.message(Form.partner_city)
+async def partner_city_handler(message: Message, state: FSMContext):
+    await state.update_data(partner_city=message.text)
+    await message.answer("3. Опыт:")
+    await state.set_state(Form.partner_experience)
+
+@dp.message(Form.partner_experience)
+async def partner_experience_handler(message: Message, state: FSMContext):
+    await state.update_data(partner_experience=message.text)
+    await message.answer("4. Телеграмм:")
+    await state.set_state(Form.partner_telegram)
+
+@dp.message(Form.partner_telegram)
+async def partner_telegram_handler(message: Message, state: FSMContext):
+    await state.update_data(partner_telegram=message.text)
+    data = await state.get_data()
+    await message.answer(
+        "Спасибо за регистрацию партнёра!\n\n"
+        f"Имя: {data['partner_name']}\n"
+        f"Город: {data['partner_city']}\n"
+        f"Опыт: {data['partner_experience']}\n"
+        f"Telegram: {data['partner_telegram']}\n\n"
+        "Мы свяжемся с вами в ближайшее время."
+    )
 
     payload = {
-        "fio": fio,
-        "username": username,
-        "phone": phone,
-        "service": service,
+        "name": data["partner_name"],
+        "city": data["partner_city"],
+        "experience": data['partner_experience'],
+        "telegram": data["partner_telegram"],
     }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post("https://nexthe-beta.vercel.app/api/der", json=payload) as resp:
+            if resp.status == 200:
+                await message.answer("Заявка на партнерство успешно отправлена!")
+            else:
+                await message.answer("Ошибка при отправке заявки на партнерство.")
+
+    await state.clear()
+
+@dp.message(Form.invoice_valuta)
+async def process_invoice_valuta(message: Message, state: FSMContext):
+    await state.update_data(valuta=message.text)
+    await message.answer("2. Введите страну получателя:")
+    await state.set_state(Form.invoice_strana)
+
+@dp.message(Form.invoice_strana)
+async def process_invoice_strana(message: Message, state: FSMContext):
+    await state.update_data(strana=message.text)
+    await message.answer("3. Введите сумму:")
+    await state.set_state(Form.invoice_summa)
+
+@dp.message(Form.invoice_summa)
+async def process_invoice_summa(message: Message, state: FSMContext):
+    await state.update_data(summa=message.text)
+    await message.answer("4. Введите инвойс:")
+    await state.set_state(Form.invoice_screen)
+
+@dp.message(Form.invoice_screen)
+async def process_invoice_screen(message: Message, state: FSMContext):
+    if message.photo:
+        file_id = message.photo[-1].file_id 
+        file = await bot.get_file(file_id)
+        file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file.file_path}"
+        await state.update_data(screen=file_url)
+        await message.answer("Инвойс принят. Теперь введите комментарий:")
+        await state.set_state(Form.invoice_comm)
+    else:
+        await state.update_data(screen=message.text)
+        await message.answer("Введите комментарий:")
+        await state.set_state(Form.invoice_comm)
+
+@dp.message(Form.invoice_comm)
+async def process_invoice_comm(message: Message, state: FSMContext):
+    await state.update_data(comm=message.text)
+    data = await state.get_data()
+    payload = {
+        "valuta": data["valuta"],
+        "strana": data["strana"],
+        "summa": data['summa'],
+        "screen": data["screen"],
+        "comm": data["comm"],
+        "username": "@" + message.from_user.username or "не указан"
+    }
+
+    await message.answer("Заявка на оплату инвойса отправлена, ожидайте!")
     await state.clear()
 
     async with aiohttp.ClientSession() as session:
-        async with session.post("https://nexthe-beta.vercel.app/api/search", json=payload) as resp:
-              await message.answer("Заявка успешно отправлена! Введите /start для начала заново.")
+        async with session.post("https://nexthe-beta.vercel.app/api/invoice", json=payload) as resp:
+              await message.answer("Инвойс успешно отправлен!")
 
-
-@dp.message(Command("admin"), StateFilter("*"))
-async def admin_panel(message: Message, state: FSMContext):
-    if message.from_user.id != ADMIN_ID:
-        await message.answer("У вас нет доступа к этой команде.")
-        return
-
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Добавить услугу", callback_data="admin_add")],
-        [InlineKeyboardButton(text="Удалить услугу", callback_data="admin_delete")],
-    ])
-    await message.answer("Панель администратора. Выберите действие:", reply_markup=kb)
-    await state.set_state(AdminForm.waiting_for_action)
-
-@dp.callback_query(lambda c: c.data and c.data.startswith("admin_"))
-async def admin_actions(call: CallbackQuery, state: FSMContext):
-    if call.from_user.id != ADMIN_ID:
-        await call.answer("Доступ запрещён", show_alert=True)
-        return
-
-    action = call.data[len("admin_"):]
-
-    if action == "add":
-        await state.set_state(AdminForm.waiting_for_new_service_name)
-        await call.message.answer("Введите название услуги для добавления:")
-        await call.answer()
-
-    elif action == "delete":
-        await state.set_state(AdminForm.waiting_for_service_to_delete)
-        await call.message.answer("Введите название услуги для удаления:")
-        await call.answer()
-
-@dp.message(AdminForm.waiting_for_new_service_name)
-async def process_for_name(message: Message, state: FSMContext):
-    service_name = message.text.strip()
-    async with aiosqlite.connect('database.db') as db:
-        try:
-            await db.execute('INSERT INTO derty (name) VALUES (?)', (service_name,))
-            await db.commit()
-            await message.answer(f"Услуга '{service_name}' добавлена в базу данных.")
-            services = await get_services()
-            await message.answer("\n".join(f"{i+1}. {service}" for i, service in enumerate(services)))
-        except aiosqlite.IntegrityError:
-            await message.answer(f"Услуга '{service_name}' уже существует в базе.")
-    await state.clear()
-
-@dp.message(AdminForm.waiting_for_service_to_delete)
-async def process_for_delete(message: Message, state: FSMContext):
-    service_name = message.text.strip()
-    async with aiosqlite.connect('database.db') as db:
-        cursor = await db.execute('DELETE FROM derty WHERE name = ?', (service_name,))
-        await db.commit()
-        await message.answer(f"Услуга '{service_name}' удалена из базы данных.")
-        services = await get_services()
-        await message.answer("\n".join(f"{i+1}. {service}" for i, service in enumerate(services)))
-    await state.clear()
-
-async def main():
-    await setup_database()
-    await dp.start_polling(bot)
+@dp.callback_query(F.data == "zayvka")
+async def zayvka(call: CallbackQuery, state: FSMContext):
+    await call.message.answer("Форма заявки")
+    await call.answer()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import asyncio
+    asyncio.run(dp.start_polling(bot))
