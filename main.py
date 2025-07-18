@@ -132,7 +132,7 @@ async def process_menu_callback(call: CallbackQuery, state: FSMContext):
         await call.message.answer(
             "PaySecure — ваш надёжный партнёр в мире финтеха.\n\n"
             "Оформляем карты, помогаем с оплатой международных инвойсов.\n\n"
-            "Контакт: @admin_telegram\n"
+            "Контакт: @Paysecure1\n"
             "Email: Paysecure2025@gmail.com"
         )
 
@@ -203,12 +203,10 @@ async def strana_telegram(message: Message, state: FSMContext):
 @dp.message(Form.strana_telegram)
 async def strana_fer(message: Message, state: FSMContext):
     await state.update_data(selected_telegram=message.text)
-    await message.answer(f"Введите страну:")
     await state.set_state(Form.strana_strana)
 
 @dp.message(Form.strana_strana)
 async def strana_fer(message: Message, state: FSMContext):
-    await state.update_data(selected_strana=message.text)
     await message.answer(f"Введите способ связи:")
     await state.set_state(Form.strana_sv)
 
@@ -227,7 +225,6 @@ async def strana_comm(message: Message, state: FSMContext):
         f"Страна карты: {data['selected_country']}\n"
         f"Имя: {data['selected_name']}\n"
         f"Телеграмм: {data['selected_telegram']}\n"
-        f"Страна: {data['selected_strana']}\n"
         f"Способ связи: {data['selected_sv']}\n"
         f"Комментарий: {data['selected_comm']}\n\n"
         "Мы свяжемся с вами в ближайшее время."
@@ -237,7 +234,6 @@ async def strana_comm(message: Message, state: FSMContext):
         "strana_card": data["selected_country"],
         "name": data["selected_name"],
         "telegram": data["selected_telegram"],
-        "strana": data['selected_strana'],
         "sv": data["selected_sv"],
         "comm": data["selected_comm"],
     }
