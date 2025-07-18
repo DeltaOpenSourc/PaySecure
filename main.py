@@ -198,15 +198,11 @@ async def manager_sv(message: Message, state: FSMContext):
 async def strana_telegram(message: Message, state: FSMContext):
     await state.update_data(selected_name=message.text)
     await message.answer(f"Введите telegram:")
-    await state.set_state(Form.strana_telegram)
-
-@dp.message(Form.strana_telegram)
-async def strana_fer(message: Message, state: FSMContext):
-    await state.update_data(selected_telegram=message.text)
     await state.set_state(Form.strana_strana)
 
 @dp.message(Form.strana_strana)
 async def strana_fer2(message: Message, state: FSMContext):
+    await state.update_data(selected_telegram=message.text)
     await message.answer(f"Введите способ связи:")
     await state.set_state(Form.strana_sv)
 
