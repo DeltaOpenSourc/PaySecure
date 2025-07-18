@@ -6,11 +6,9 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import aiosqlite
 import aiohttp
-import logging
 
 TOKEN = "7969411886:AAFIxEzdCYe-ehyOdV1E3Hu0iBJ465iqN5s"
 
-logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
