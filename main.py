@@ -188,10 +188,7 @@ async def manager_sv(message: Message, state: FSMContext):
 
     async with aiohttp.ClientSession() as session:
         async with session.post("https://nexthe-beta.vercel.app/api/manager", json=payload) as resp:
-            if resp.status == 200:
-                await message.answer("Отправлено...")
-            else:
-                await message.answer("Ошибка при отправке заявки на партнерство.")
+            await message.answer("Отправлено...")
     
 
 @dp.message(Form.strana_name)
@@ -341,10 +338,7 @@ async def partner_telegram_handler(message: Message, state: FSMContext):
 
     async with aiohttp.ClientSession() as session:
         async with session.post("https://nexthe-beta.vercel.app/api/der", json=payload) as resp:
-            if resp.status == 200:
-                await message.answer("Заявка на партнерство успешно отправлена!")
-            else:
-                await message.answer("Ошибка при отправке заявки на партнерство.")
+            await message.answer("Заявка на партнерство успешно отправлена!")
 
     await state.clear()
 
