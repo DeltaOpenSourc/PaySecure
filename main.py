@@ -206,7 +206,7 @@ async def strana_fer(message: Message, state: FSMContext):
     await state.set_state(Form.strana_strana)
 
 @dp.message(Form.strana_strana)
-async def strana_fer(message: Message, state: FSMContext):
+async def strana_fer2(message: Message, state: FSMContext):
     await message.answer(f"Введите способ связи:")
     await state.set_state(Form.strana_sv)
 
