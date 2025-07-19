@@ -6,8 +6,9 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import aiosqlite
 import aiohttp
-
-TOKEN = "7969411886:AAFIxEzdCYe-ehyOdV1E3Hu0iBJ465iqN5s"
+from dotenv import load_dotenv  
+load_dotenv()  
+TOKEN = os.getenv('BOT_TOKEN') 
 
 
 bot = Bot(token=TOKEN)
