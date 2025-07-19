@@ -1,19 +1,45 @@
 from aiogram import Bot, Dispatcher, F
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import aiosqlite
 import aiohttp
-import os
-from dotenv import load_dotenv
-load_dotenv()
-TOKEN = os.getenv("TOKEN")
+
+TOKEN = "7969411886:AAFIxEzdCYe-ehyOdV1E3Hu0iBJ465iqN5s"
 
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
+
+async def CreateDB():
+    query = """
+    CREATE TABLE IF NOT EXISTS cards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        conditions TEXT NOT NULL
+    );
+    """
+    async with aiosqlite.connect("services.db") as db:
+        await db.execute(query)
+        await db.commit()
+
+
+async def get_cards():
+    async with aiosqlite.connect("services.db") as db:
+        cursor = await db.execute("SELECT id, name FROM cards")
+        cards = await cursor.fetchall()
+        await cursor.close()
+    return cards
+
+async def cards_keyboard():
+    cards = await get_cards()
+    kb_builder = InlineKeyboardBuilder()
+    for card_id, card_name in cards:
+        kb_builder.button(text=card_name, callback_data=f"card_{card_id}")
+    kb_builder.adjust(1)
+    return kb_builder.as_markup()
 
 class Form(StatesGroup):
     waiting_for_service_choice = State()
@@ -44,6 +70,9 @@ class Form(StatesGroup):
 
     manager = State()
 
+    admin_waiting_for_country_name = State()
+    admin_waiting_for_country_conditions = State()
+
 
 MAIN_MENU_BUTTONS = [
     ("Оформить карту", "menu_card"),
@@ -64,9 +93,21 @@ MAIN_FEART_BUTTONS = [
     ("Оставить заявку", "zayvka"),
 ]
 
+MAIN_ADMIN_BUTTONS = [
+    ("Добавить страну-карту", "st_create"),
+    ("Удалить страну-карту", "st_delete"),
+]
+
 def main_menu_keyboard():
     kb_builder = InlineKeyboardBuilder()
     for text, cb_data in MAIN_MENU_BUTTONS:
+        kb_builder.button(text=text, callback_data=cb_data)
+    kb_builder.adjust(1)
+    return kb_builder.as_markup()
+
+def main_admin_keyboard():
+    kb_builder = InlineKeyboardBuilder()
+    for text, cb_data in MAIN_ADMIN_BUTTONS:
         kb_builder.button(text=text, callback_data=cb_data)
     kb_builder.adjust(1)
     return kb_builder.as_markup()
@@ -86,30 +127,93 @@ def main_card_keyboard():
     return kb_builder.as_markup()
 
 
-async def get_services():
-    async with aiosqlite.connect("services.db") as db:
-        cursor = await db.execute("SELECT id, name FROM services")
-        services = await cursor.fetchall()
-        await cursor.close()
-    return services
-
-async def services_keyboard():
-    services = await get_services()
-    kb_builder = InlineKeyboardBuilder()
-    for service_id, service_name in services:
-        kb_builder.button(text=service_name, callback_data=f"service_{service_id}")
-    kb_builder.adjust(1)
-    return kb_builder.as_markup()
-
-
 
 @dp.message(CommandStart())
 async def start(message: Message, state: FSMContext):
     kb = main_menu_keyboard()
+    await CreateDB()
     await message.answer(
-        "Добро пожаловать в PaySecure! Выберите нужный пункт меню:",
-        reply_markup=kb
+        "👋 Приветствуем в PaySecure — вашем личном помощнике в мире финансов.\n\n Здесь вы можете:\n💱 Переводить деньги между странами\n  💳 Получать карты для оплаты\n  📄 Оплачивать инвойсы в любых валютах Быстро\n. Надёжно. Без лишних вопросов.  \n\nВыберите нужную функцию ниже 👇",
+        reply_markup=kb,
+        
     )
+    await state.clear()
+
+admin_ids = [5108832503]
+
+@dp.message(Command(commands=["admin"]))
+async def admin_add_card(message: Message):
+    if message.from_user.id not in admin_ids:
+        await message.answer("У вас нет доступа к этой команде.")
+        return
+
+    await message.answer(
+        "Выберите действие:",
+        reply_markup=main_admin_keyboard()
+    )
+@dp.callback_query(F.data.startswith("st_"))
+async def process_admin_callback(call: CallbackQuery, state: FSMContext):
+    action = call.data[len("st_"):]
+
+    if action == "create":
+        await call.message.answer("Введите название новой страны-карты:")
+        await state.set_state(Form.admin_waiting_for_country_name)
+
+    elif action == "delete":
+         cards = await get_cards()
+         if not cards:
+            await call.message.answer("Нет стран для удаления.")
+            await call.answer()
+            return
+
+         kb_builder = InlineKeyboardBuilder()
+         for card_id, card_name in cards:
+             kb_builder.button(text=card_name, callback_data=f"admin_delete_{card_id}")
+         kb_builder.adjust(1)
+         await call.message.answer("Выберите страну для удаления:", reply_markup=kb_builder.as_markup())
+
+    await call.answer()
+
+
+@dp.callback_query(F.data.startswith("admin_delete_"))
+async def admin_delete_card_callback(call: CallbackQuery):
+    card_id_str = call.data[len("admin_delete_"):]
+    card_id = int(card_id_str)
+
+    async with aiosqlite.connect("services.db") as db:
+        cursor = await db.execute("SELECT name FROM cards WHERE id = ?", (card_id,))
+        row = await cursor.fetchone()
+        await cursor.close()
+        card_name = row[0]
+
+        await db.execute("DELETE FROM cards WHERE id = ?", (card_id,))
+        await db.commit()
+
+    await call.message.edit_text(f"Страна-карта '{card_name}' успешно удалена.")
+    await call.answer()
+
+
+@dp.message(Form.admin_waiting_for_country_name)
+async def admin_country_name_entered(message: Message, state: FSMContext):
+    country_name = message.text.strip()
+    await state.update_data(admin_country_name=country_name)
+    await message.answer("Введите условия для страны-карты:")
+    await state.set_state(Form.admin_waiting_for_country_conditions)
+
+@dp.message(Form.admin_waiting_for_country_conditions)
+async def admin_country_conditions_entered(message: Message, state: FSMContext):
+    conditions = message.text.strip()
+    data = await state.get_data()
+    country_name = data.get("admin_country_name")
+
+    async with aiosqlite.connect("services.db") as db:
+        await db.execute(
+            "INSERT INTO cards (name, conditions) VALUES (?, ?)",
+            (country_name, conditions)
+        )
+        await db.commit()
+
+    await message.answer(f"Страна-карта '{country_name}' успешно добавлена.")
     await state.clear()
 
 @dp.callback_query(F.data.startswith("menu_"))
@@ -117,8 +221,8 @@ async def process_menu_callback(call: CallbackQuery, state: FSMContext):
     action = call.data[len("menu_"):]
 
     if action == "card":
-        kb_strana = main_card_keyboard()
-        await call.message.answer("Выберите страну:", reply_markup=kb_strana)
+        cards_create = await cards_keyboard()
+        await call.message.answer("Выберите страну:", reply_markup=cards_create)
 
     elif action == "invoice":
         await call.message.answer("Пожалуйста, введите данные для оплаты инвойсов.\n1. Валюта:")
@@ -132,7 +236,7 @@ async def process_menu_callback(call: CallbackQuery, state: FSMContext):
         await call.message.answer(
             "PaySecure — ваш надёжный партнёр в мире финтеха.\n\n"
             "Оформляем карты, помогаем с оплатой международных инвойсов.\n\n"
-            "Контакт: @Paysecure1\n"
+            "Контакт: @admin_telegram\n"
             "Email: Paysecure2025@gmail.com"
         )
 
@@ -141,24 +245,25 @@ async def process_menu_callback(call: CallbackQuery, state: FSMContext):
         await state.set_state(Form.partner_name)
     await call.answer()
 
-@dp.callback_query(F.data.startswith("strana_"))
+@dp.callback_query(F.data.startswith("card_"))
 async def process_strana_callback(call: CallbackQuery, state: FSMContext):
-    country = call.data[len("strana_"):]
+    country = call.data[len("card_"):]
     heart = main_feart_keyboard()
-    if country != "other":
-        country_name_map = {
-            "turcian": "Турция",
-            "oae": "ОАЭ",
-            "tadzhikistan": "Таджикистан",
-        }
-        country_text = country_name_map.get(country, country)
-        await state.update_data(selected_country=country_text)
+    async with aiosqlite.connect("services.db") as db:
+        cursor = await db.execute("SELECT name FROM cards WHERE id = ?", (country,))
+        row = await cursor.fetchone()
+        await cursor.close()
+        card_name = row[0]
+    await state.update_data(selected_country=card_name)
+    await call.message.answer(f"Вы выбрали карту {card_name}")
 
-        await call.message.answer(f"Вы выбрали карту {country_text}")
-        await call.message.answer("Условия карты:", reply_markup=heart)
-    else:
-        await call.message.answer("Пожалуйста, введите страну:")
-        await state.set_state(Form.strana_other)
+    async with aiosqlite.connect("services.db") as db_one:
+        cursor_one = await db_one.execute("SELECT conditions FROM cards WHERE id = ?", (country,))
+        row_one = await cursor_one.fetchone()
+        await cursor_one.close()
+        card_name_one = row_one[0]
+
+    await call.message.answer(f"Условия карты: {card_name_one}", reply_markup=heart)
     await call.answer()
 
 
@@ -178,7 +283,7 @@ async def manager_sv(message: Message, state: FSMContext):
     await state.update_data(selected_manager=message.text)
     dataManager = await state.get_data()
     coun = dataManager.get("selected_manager", "не задан")
-    await message.answer(f"Ваш вопрос: {coun} передан менеджеру ожидайте ответа!")
+    await message.answer(f"Ваш вопрос: '{coun}' передан менеджеру ожидайте ответа!")
     await state.clear()
 
     payload = {
@@ -188,18 +293,27 @@ async def manager_sv(message: Message, state: FSMContext):
 
     async with aiohttp.ClientSession() as session:
         async with session.post("https://nexthe-beta.vercel.app/api/manager", json=payload) as resp:
-            await message.answer("Отправлено...")
+            if resp.status == 200:
+                await message.answer("Отправлено...")
+            else:
+                await message.answer("Ошибка при отправке заявки на партнерство.")
     
 
 @dp.message(Form.strana_name)
 async def strana_telegram(message: Message, state: FSMContext):
     await state.update_data(selected_name=message.text)
     await message.answer(f"Введите telegram:")
+    await state.set_state(Form.strana_telegram)
+
+@dp.message(Form.strana_telegram)
+async def strana_fer(message: Message, state: FSMContext):
+    await state.update_data(selected_telegram=message.text)
+    await message.answer(f"Введите страну:")
     await state.set_state(Form.strana_strana)
 
 @dp.message(Form.strana_strana)
-async def strana_fer2(message: Message, state: FSMContext):
-    await state.update_data(selected_telegram=message.text)
+async def strana_fer(message: Message, state: FSMContext):
+    await state.update_data(selected_strana=message.text)
     await message.answer(f"Введите способ связи:")
     await state.set_state(Form.strana_sv)
 
@@ -218,6 +332,7 @@ async def strana_comm(message: Message, state: FSMContext):
         f"Страна карты: {data['selected_country']}\n"
         f"Имя: {data['selected_name']}\n"
         f"Телеграмм: {data['selected_telegram']}\n"
+        f"Страна: {data['selected_strana']}\n"
         f"Способ связи: {data['selected_sv']}\n"
         f"Комментарий: {data['selected_comm']}\n\n"
         "Мы свяжемся с вами в ближайшее время."
@@ -227,6 +342,7 @@ async def strana_comm(message: Message, state: FSMContext):
         "strana_card": data["selected_country"],
         "name": data["selected_name"],
         "telegram": data["selected_telegram"],
+        "strana": data['selected_strana'],
         "sv": data["selected_sv"],
         "comm": data["selected_comm"],
     }
@@ -338,7 +454,10 @@ async def partner_telegram_handler(message: Message, state: FSMContext):
 
     async with aiohttp.ClientSession() as session:
         async with session.post("https://nexthe-beta.vercel.app/api/der", json=payload) as resp:
-            await message.answer("Заявка на партнерство успешно отправлена!")
+            if resp.status == 200:
+                await message.answer("Заявка на партнерство успешно отправлена!")
+            else:
+                await message.answer("Ошибка при отправке заявки на партнерство.")
 
     await state.clear()
 
