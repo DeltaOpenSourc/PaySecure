@@ -6,7 +6,8 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import aiosqlite
 import aiohttp
-from dotenv import load_dotenv  
+from dotenv import load_dotenv
+import os
 load_dotenv()  
 TOKEN = os.getenv('TOKEN') 
 
